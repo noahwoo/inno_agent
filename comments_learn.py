@@ -7,8 +7,11 @@ from typing import List, Dict
 from langchain.llms import OpenAI
 from langchain import PromptTemplate, FewShotPromptTemplate
 from langchain.prompts.example_selector import LengthBasedExampleSelector
+from nltk.translate.bleu_score import sentence_bleu
 
 from inference_api import YiyanInferenceApi, HfInferenceApi
+import jieba
+from rouge_chinese import Rouge
 
 print(os.environ['HOME'])
 print(os.environ['OPENAI_API_KEY'])
@@ -17,6 +20,7 @@ print(os.environ['HUGGINGFACEHUB_API_TOKEN'])
 LLM_VENDORS = {"openai" : {"llm" : OpenAI(model_name="text-davinci-003"), "context_size" : 2048, "prompt_in_response" : False}, 
                "yiyan" : {"llm" : YiyanInferenceApi("yiyan-007"), "context_size" : 1024, "prompt_in_response" : True},
                "hf" : {"llm" : HfInferenceApi("bigscience/bloomz"), "context_size" : 1024, "prompt_in_response" : True}}
+rouge = Rouge()
 
 def extract_author_reply(input_stream, llm_vendor : str) :
     # read video comments line by line
@@ -92,6 +96,7 @@ def prompt_one_author(authid : str, examples : List[Dict[str, str]], llm_vendor,
         example_separator = "\n"
     )
 
+    rouge_score, npred = 0.0, 0
     for idx, example in enumerate(examples) :
         if idx < few_shot_num :
             print("Author: {0}\tPost: {1}\nAuthor-Reply: {2}\n".format(
@@ -108,13 +113,22 @@ def prompt_one_author(authid : str, examples : List[Dict[str, str]], llm_vendor,
                 llm_reply = "API Error: " + e
 
             print(f"Author: {authid}\tPost: {example['post']}\nAuthor reply: {example['reply']}\nLLM({llm_vendor}) replay: {llm_reply}")
-            print('-'*100)
+
+            rouge_score += rouge.get_scores(' '.join(jieba.cut(example['reply'],  cut_all=False)), 
+                                            ' '.join(jieba.cut(llm_reply, cut_all=False)))[0]['rouge-l']['f']
+            npred += 1
+            print('-'*100)  
+    print(f"ROUGE-l: {rouge_score/npred:.4f}")
 
 if __name__ == '__main__' :
 
     parser = optparse.OptionParser()
     parser.add_option("-m", "--llm", dest="llm", default="hf", help="vendor of large language model")
     opts, args = parser.parse_args()
-    
+
     # extract reply author from json record
     extract_author_reply(sys.stdin, opts.llm)
+
+    # ROUGE-l f-score
+    # BLOOM: 0.0994
+    # OpenAI: 0.0773

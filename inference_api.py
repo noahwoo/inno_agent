@@ -22,7 +22,14 @@ class HfInferenceApi(InferenceApi) :
     def _hf_hosted_inference_api(self, payload : str) :
         API_TOKEN = self.token
         inference = InferenceApi(repo_id=self.repo_id, token=API_TOKEN)
-        return inference(inputs=payload)
+        return inference(inputs=payload,
+                         params={'max_length':50, 
+                                 'min_length':5, 
+                                 'do_sample':True, 
+                                 'top_k':50, 
+                                 'top_p':0.95, 
+                                 'temperate':0.9, 
+                                 'num_return_sequences':1})
     
     def __call__(self, inputs) :
         return self._hf_hosted_inference_api(inputs)
@@ -52,7 +59,7 @@ class YiyanInferenceApi():
     
     def yiyan_inference_api(self, payload : str) :
         access_token = self.token
-        assert access_token is not None
+        assert access_token is not None, f"No access token found. Please check your environment variables"
 
         # augument payload for single round chat
         messages = list()

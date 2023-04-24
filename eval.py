@@ -1,11 +1,13 @@
 # evaluation metrics for LLM
 from typing import List
 import torch
+from nltk.translate.bleu_score import sentence_bleu
 
-def ordered_f1(ids_pred : List[torch.LongTensor], ids_ans : List[torch.LongTensor]) -> float:
+
+def bleu_score(pred : str, label : str) -> float:
     """
-    :param ids_pred:
-    :param ids_ans:
+    :param pred:
+    :param label:
     :return:
     """
-    pass
+    return sentence_bleu(label, pred)
