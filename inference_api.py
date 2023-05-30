@@ -36,13 +36,17 @@ class HfInferenceApi(InferenceApi) :
 
 # Yiyan hosted inference APIs
 class YiyanInferenceApi():
-    def __init__(self, repo_id):
-        self.token = self._yiyan_token()
+    def __init__(self, repo_id, debug=False):
         self.repo_id = repo_id
+        self.debug = debug
+        self.token = self._yiyan_token()
 
     def _yiyan_token(self) :
         yiyan_api_key=os.environ['YIYAN_API_KEY']
         yiyan_sec_key=os.environ['YIYAN_SEC_KEY']
+        if self.debug :
+            print(f"Yiyan api key: {yiyan_api_key}, Yiyan sec key: {yiyan_sec_key}")
+        
         # api-token url
         TOKEN_URL = f"https://aip.baidubce.com/oauth/2.0/token?grant_type=client_credentials&client_id={yiyan_api_key}&client_secret={yiyan_sec_key}"
         headers = {
@@ -71,10 +75,12 @@ class YiyanInferenceApi():
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
-
-        API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/agile/chat/completions?access_token={access_token}"
+        # API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/agile/chat/completions?access_token={access_token}"
+        API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={access_token}"
         response = requests.request("POST", API_URL, headers=headers, data = aug_payload)
         response = json.loads(response.content.decode('utf-8'))
+        if self.debug :
+           print(response)
         return response['result']
     
     def __call__(self, inputs):
