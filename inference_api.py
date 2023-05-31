@@ -2,6 +2,7 @@ from huggingface_hub.inference_api import InferenceApi
 import requests
 import json
 import os
+import time
 
 # Huggingface hosted inference APIs
 class HfInferenceApi(InferenceApi) :
@@ -36,9 +37,10 @@ class HfInferenceApi(InferenceApi) :
 
 # Yiyan hosted inference APIs
 class YiyanInferenceApi():
-    def __init__(self, repo_id, debug=False):
+    def __init__(self, repo_id, debug = False, max_retries = 5):
         self.repo_id = repo_id
         self.debug = debug
+        self.max_retries = max_retries
         self.token = self._yiyan_token()
 
     def _yiyan_token(self) :
@@ -77,11 +79,18 @@ class YiyanInferenceApi():
         }
         # API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/agile/chat/completions?access_token={access_token}"
         API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={access_token}"
-        response = requests.request("POST", API_URL, headers=headers, data = aug_payload)
-        response = json.loads(response.content.decode('utf-8'))
-        if self.debug :
-           print(response)
-        return response['result']
-    
+
+        retry = 0
+        while retry < self.max_retries :
+            response = requests.request("POST", API_URL, headers=headers, data = aug_payload)
+            response = json.loads(response.content.decode('utf-8'))
+            if self.debug :
+               print(response)
+            if 'result' in response :
+                return response['result']
+            time.sleep(1)
+            retry += 1
+        assert False, f"Yiyan inference API failed"
+
     def __call__(self, inputs):
         return self.yiyan_inference_api(inputs)
