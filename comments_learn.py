@@ -22,6 +22,53 @@ LLM_VENDORS = {"openai" : {"llm" : OpenAI(model_name="text-davinci-003"), "conte
                "hf" : {"llm" : HfInferenceApi("bigscience/bloomz"), "context_size" : 1024, "prompt_in_response" : True}}
 rouge = Rouge()
 
+def reformat_author_replay(input_stream, format:str, train_split:float = 0.7, output_file:str = "output") :
+    # read video comments line by line
+    authid_prev = None
+    auth_reply_buffer = []
+
+    records_buffer = []
+    for line in input_stream:
+        video_comments = json.loads(line)
+        title = video_comments['title']
+        authid = video_comments['mthid']
+        for comment in video_comments['comment'] :
+            content = comment['comment_content']
+            if 'reply_list' in comment :
+                for reply in comment['reply_list'] :
+                    if reply['is_author'] == '1' :
+                        auth_reply_buffer.append({"post":content, "reply":reply["content"], "title":title})
+        # prompt for one author
+        if authid_prev != None and authid != authid_prev : 
+            records_buffer += reformat_one_author(authid_prev, auth_reply_buffer, format)
+            auth_reply_buffer = []
+
+        authid_prev = authid
+    # the last author
+    if len(auth_reply_buffer) > 0 :
+        records_buffer += reformat_one_author(authid_prev, auth_reply_buffer, format)
+        auth_reply_buffer = []
+
+    total = len(records_buffer)
+    train_size = int(total * train_split)
+
+    with open(f"{output_file}.train.json", "w") as f :
+        f.write(json.dumps(records_buffer[:train_size], ensure_ascii=False))
+
+    with open(f"{output_file}.test.json", "w") as f :
+        f.write(json.dumps(records_buffer[train_size:], ensure_ascii=False))
+
+def reformat_one_author(authid, reply_buffer, format) :
+
+    records = []
+
+    if format == 'alpaca' :
+        for pr in reply_buffer :
+            records.append({"instruction":f"请回复用户针对<{pr['title']}>的评论", 
+                            "input": f"评论:{pr['post']}", 
+                            "output": f"回复:{pr['reply']}"})
+    return records
+
 def extract_author_reply(input_stream, llm_vendor : str) :
     # read video comments line by line
     authid_prev = None
@@ -127,8 +174,10 @@ if __name__ == '__main__' :
     opts, args = parser.parse_args()
 
     # extract reply author from json record
-    extract_author_reply(sys.stdin, opts.llm)
+    # extract_author_reply(sys.stdin, opts.llm)
+    
+    reformat_author_replay(sys.stdin, format="alpaca")
 
     # ROUGE-l f-score
-    # BLOOM: 0.0994
+    # BLOOM:  0.0994
     # OpenAI: 0.0773

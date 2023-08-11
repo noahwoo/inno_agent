@@ -87,18 +87,36 @@ def gen_by_fewshot_prompt(task_name, fewshot_set, test_set, output) :
     return (correct, total)
 
 def extract_answer(completion) :
-    answer_prefixes = ['答案：', '答案为', '答案是', '故选',
-                        '选项中最接近的是', '选项为', '答案应该是', 
-                        '所以答案选']
+    
+    # string find part
+    answer_prefixes = ['答案：', '答案:', '答案为', '答案是', '答案选',
+                       '故选', '选项中最接近的是', '选项为', '答案应该是',
+                       '因此选择', '因此答案为：', '即选项', '故选择',
+                       '正确的选项是', '答案选', '因此答案为 ', '故选 ']
     for answer_prefix in answer_prefixes :
         if answer_prefix in completion :
-            pos = completion.find(answer_prefix) + len(answer_prefix)
+            pos = completion.rfind(answer_prefix) + len(answer_prefix)
             if pos < len(completion) :
                 answer = completion[pos]
                 if answer == '{' and pos + 1 < len(completion) :
                     answer = completion[pos + 1]
                 if answer in ['A', 'B', 'C', 'D'] :
                     return answer
+    # regex part
+    answer_patterns = [r'选项\((.*?)\)为正确', r'选项(.*?)为正确',
+                       r'选项\((.*?)\)正确', r'选项(.*?)正确', 
+                       r'选项\((.*?)\)是正确', r'选项(.*?)是正确',
+                       r'选择\((.*?)\)为正确', r'选择(.*?)为正确', 
+                       r'因此\((.*?)\)选项正确', r'因此(.*?)选项正确',
+                       r'答案：<\((.*?)\)>', r'答案：<(.*?)>']
+    
+    for pattern in answer_patterns :
+        match = regex.search(pattern, completion)
+        if match :
+            answer = match.group(1)
+            if answer in ['A', 'B', 'C', 'D'] : 
+                return answer
+    
     return 'Err'
 
 if __name__ == "__main__" :

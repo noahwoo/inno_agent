@@ -1,8 +1,11 @@
 from huggingface_hub.inference_api import InferenceApi
+
 import requests
 import json
 import os
 import time
+from collections import defaultdict
+from langchain.llms.base import LLM
 
 # Huggingface hosted inference APIs
 class HfInferenceApi(InferenceApi) :
@@ -36,11 +39,20 @@ class HfInferenceApi(InferenceApi) :
         return self._hf_hosted_inference_api(inputs)
 
 # Yiyan hosted inference APIs
-class YiyanInferenceApi():
-    def __init__(self, repo_id, debug = False, max_retries = 5):
+HOSTED_LLMS = { 
+    "ERNIE-Bot" : "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions", 
+    "ERNIE-Bot-turbo" : "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/eb-instant", 
+    "BLOOMZ-7B" : "https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/bloomz_7b1"
+}
+
+class YiyanInferenceApi(LLM):
+    def __init__(self, repo_id, debug = False, max_retries = 5, system = None):
         self.repo_id = repo_id
+        assert self.repo_id in HOSTED_LLMS, f"Unsupported repo_id: {repo_id}"
+
         self.debug = debug
         self.max_retries = max_retries
+        self.system = system
         self.token = self._yiyan_token()
 
     def _yiyan_token(self) :
@@ -63,22 +75,35 @@ class YiyanInferenceApi():
             return response[token_fn]
         return None
     
-    def yiyan_inference_api(self, payload : str) :
+    def yiyan_inference_api(self, payload : str, **kwargs) :
         access_token = self.token
         assert access_token is not None, f"No access token found. Please check your environment variables"
 
         # augument payload for single round chat
         messages = list()
         messages.append({"role" : "user", "content" : payload})
-        aug_payload = json.dumps({"messages" : messages})
-        # print(aug_payload)
+
+        # add ext kwargs
+        # aug_payload = json.dumps({"messages" : messages})
+        data = defaultdict(dict)
+        if self.system :
+            data['system'] = self.system
+        data["messages"] = messages
+        for key, val in kwargs.items() :
+            data[key] = val
+        aug_payload = json.dumps(data)
+
+        if self.debug :
+            print(json.dumps(data, ensure_ascii=False))
 
         headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
         # API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/agile/chat/completions?access_token={access_token}"
-        API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={access_token}"
+        # API_URL = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions?access_token={access_token}"
+
+        API_URL = f"{HOSTED_LLMS[self.repo_id]}?access_token={access_token}"
 
         retry = 0
         while retry < self.max_retries :
@@ -88,9 +113,17 @@ class YiyanInferenceApi():
                print(response)
             if 'result' in response :
                 return response['result']
+            else :
+                if self.debug :
+                    print(f"Error code: {response['error_code']}")
+                    print(f"Error message: {response['error_msg']}")
             time.sleep(1)
             retry += 1
         assert False, f"Yiyan inference API failed"
+    def _generate(self) :
+        pass
+    def _llm_type(self) -> str:
+        return self.repo_id
 
-    def __call__(self, inputs):
-        return self.yiyan_inference_api(inputs)
+    def __call__(self, inputs, **kwargs):
+        return self.yiyan_inference_api(inputs, **kwargs)
