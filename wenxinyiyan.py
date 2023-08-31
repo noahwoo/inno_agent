@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from pydantic import Field, root_validator
 from requests.exceptions import HTTPError
@@ -92,6 +92,9 @@ class WxYiyan(LLM):
 
     model_kwargs: Dict[str, Any] = Field(default_factory=dict)
 
+    chat : bool = False
+    """chat or completion mode: chat True, completion False (default)."""
+
     system : Optional[str] = None
     """system role of model"""
 
@@ -149,7 +152,8 @@ class WxYiyan(LLM):
             "top_p": self.top_p,
             "temperature" : self.temperature,
             "penalty_score" : self.penalty_score,
-            "system" : self.system
+            "system" : self.system,
+            "chat" : self.chat
         }
 
         return {**normal_params, **self.model_kwargs}
@@ -275,11 +279,15 @@ class YiyanClient():
             return response[token_fn]
         assert False, "Failed to access token" 
     
-    def yiyan_inference_api(self, payload : str, model_name : str, **kwargs) :
+    def yiyan_inference_api(self, payload :str, model_name : str, **kwargs) :
         
         # augument payload for single round chat
         messages = list()
-        messages.append({"role" : "user", "content" : payload})
+        if kwargs['chat'] :
+            assert payload[0] == '[', "chat=True, payload must be a json list"
+            messages = json.loads(payload)
+        else :
+            messages.append({"role" : "user", "content" : payload})
 
         # add ext kwargs
         # aug_payload = json.dumps({"messages" : messages})
@@ -289,7 +297,7 @@ class YiyanClient():
 
         data["messages"] = messages
         for key, val in kwargs.items() :
-            if key not in ['prompt', 'model', 'system'] :
+            if key not in ['prompt', 'model', 'system', 'chat'] :
                 data[key] = val
         aug_payload = json.dumps(data)
 
